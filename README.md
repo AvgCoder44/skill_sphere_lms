@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🎓 Learning Management System (LMS)
+# 🎓 SkillSphere
 
 A modern, full-stack e-learning platform built with the MERN stack
 
@@ -17,7 +17,7 @@ A modern, full-stack e-learning platform built with the MERN stack
 
 ## LIVE - DEMO 🌐
   
-VISIT 👉 [LINK](https://lms-frontend-eosin-sigma.vercel.app/)
+VISIT 👉 [https://skillspherename.vercel.app](https://skillspherename.vercel.app)
 </div>
 
 <br/><hr/><br/>
@@ -26,19 +26,22 @@ VISIT 👉 [LINK](https://lms-frontend-eosin-sigma.vercel.app/)
 
 ### For Students
 - 📚 Browse and enroll in various courses
-- 💳 Secure payment processing with Stripe
-- 📝 Track learning progress
+- 💳 Secure payment processing with Razorpay
+- 📝 Real-time learning progress tracking
+- ⏱️ Auto-completion of lectures based on watch time
 - ⭐ Rate and review courses
 - 👤 Personalized user dashboard
 - 🎯 Access to enrolled course content
+- 🔍 Search and filter courses
 
 ### For Educators
-- 📝 Create and manage courses
+- 📝 Create and edit courses
 - 📊 Track student enrollments
 - 💰 Manage course pricing and discounts
 - 📈 View analytics and earnings
 - 🖼️ Upload course thumbnails via Cloudinary
 - 📹 Organize course content and materials
+- ✏️ Edit existing courses with ease
 
 ### General Features
 - 🔐 Secure authentication with Clerk
@@ -55,14 +58,17 @@ VISIT 👉 [LINK](https://lms-frontend-eosin-sigma.vercel.app/)
 - React Router for navigation
 - Tailwind CSS for styling
 - Clerk for authentication UI components
-- Stripe Elements for payment UI
+- Razorpay Checkout for payment processing
+- React YouTube for video playback
+- Axios for API calls
 
 ### Backend
 - Node.js & Express.js
 - MongoDB with Mongoose ODM
 - Clerk for user authentication
 - Cloudinary for image management
-- Stripe for payment processing
+- Razorpay for payment processing
+- Webhook handling for Clerk and Razorpay
 
 ### Security Features
 - JWT token authentication
@@ -73,18 +79,18 @@ VISIT 👉 [LINK](https://lms-frontend-eosin-sigma.vercel.app/)
 ## 🚀 Getting Started
 
 ### Prerequisites
-- Node.js (v14 or higher)
-- MongoDB
+- Node.js (v18 or higher)
+- MongoDB (MongoDB Atlas recommended)
 - Clerk Account
-- Stripe Account
+- Razorpay Account
 - Cloudinary Account
 
 ### Installation
 
 1. Clone the repository
 ```bash
-git clone https://github.com/elyse502/lms.git
-cd lms
+git clone https://github.com/AvgCoder44/SkillSphere.git
+cd SkillSphere
 ```
 
 2. Install dependencies
@@ -106,24 +112,31 @@ Create `.env` files in both client and server directories:
 # Server .env
 PORT=5000
 MONGODB_URI=your_mongodb_uri
+CLERK_PUBLISHABLE_KEY=your_clerk_publishable_key
 CLERK_SECRET_KEY=your_clerk_secret_key
-STRIPE_SECRET_KEY=your_stripe_secret_key
-CLOUDINARY_NAME=your_cloudinary_name
+CLERK_WEBHOOK_SECRET=your_clerk_webhook_secret
+RAZORPAY_KEY_ID=your_razorpay_key_id
+RAZORPAY_KEY_SECRET=your_razorpay_key_secret
+CURRENCY=INR
+CLOUDINARY_CLOUD_NAME=your_cloudinary_cloud_name
 CLOUDINARY_API_KEY=your_cloudinary_api_key
-CLOUDINARY_SECRET_KEY=your_cloudinary_secret_key
+CLOUDINARY_API_SECRET=your_cloudinary_api_secret
+FRONTEND_URL=http://localhost:5173
+CORS_ORIGIN=http://localhost:5173
 ```
 
 ```env
 # Client .env
+VITE_BACKEND_URL=http://localhost:5000
 VITE_CLERK_PUBLISHABLE_KEY=your_clerk_publishable_key
-VITE_STRIPE_PUBLISHABLE_KEY=your_stripe_publishable_key
+VITE_RAZORPAY_KEY_ID=your_razorpay_key_id
 ```
 
 4. Start the application
 ```bash
 # Start backend server
 cd server
-npm run start
+npm start
 
 # Start frontend in a new terminal
 cd client
@@ -133,52 +146,55 @@ npm run dev
 ## 📱 Application Structure
 
 ```
-lms/
+SkillSphere/
 ├── client/                 # Frontend React application
 │   ├── src/
 │   │   ├── components/    # Reusable UI components
-│   │   ├── pages/        # Page components
-│   │   ├── context/      # React context providers
-│   │   └── utils/        # Utility functions
-│   └── public/           # Static assets
-└── server/               # Backend Node.js application
-    ├── configs/          # Configuration files
-    ├── controllers/      # Request handlers
-    ├── models/          # MongoDB models
-    ├── routes/          # API routes
-    └── utils/           # Helper functions
+│   │   ├── pages/         # Page components
+│   │   ├── context/       # React context providers
+│   │   ├── assets/        # Images and static assets
+│   │   └── utils/         # Utility functions
+│   └── public/            # Static assets
+└── server/                # Backend Node.js application
+    ├── configs/           # Configuration files
+    ├── controllers/       # Request handlers
+    ├── models/           # MongoDB models
+    ├── routes/           # API routes
+    └── utils/            # Helper functions
 ```
 
 ## 🔒 Security
 
 - Authentication handled by Clerk
-- Secure payment processing with Stripe
-- Protected API endpoints
+- Secure payment processing with Razorpay
+- Protected API endpoints with Clerk middleware
 - Secure file uploads with Cloudinary
 - Input validation and sanitization
 - Protected environment variables
+- Webhook signature verification for Clerk and Razorpay
+
+## 🚀 Deployment
+
+- **Frontend**: Deployed on [Vercel](https://vercel.com)
+- **Backend**: Deployed on [Render](https://render.com)
+- **Database**: MongoDB Atlas
 
 ## 🤝 Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
 
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
+
 ## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE](https://github.com/elyse502/lms/blob/main/LICENSE) file for details.
-
-## 📞 Contact
-For any questions or support, please contact:
-- [**NIYIBIZI Elysée**](https://linktr.ee/niyibizi_elysee)👨🏿‍💻 | [Github](https://github.com/elyse502) | [Linkedin](https://www.linkedin.com/in/niyibizi-elys%C3%A9e/) | [Twitter](https://twitter.com/Niyibizi_Elyse).
-- **Email**: <elyseniyibizi502@gmail.com>
-
-[![LinkedIn](https://img.shields.io/badge/LinkedIn-0077B5?style=for-the-badge&logo=linkedin&logoColor=white)](https://www.linkedin.com/in/niyibizi-elys%C3%A9e/) [![@phenrysay](https://img.shields.io/badge/Twitter-1DA1F2?style=for-the-badge&logo=twitter&logoColor=white)](https://twitter.com/Niyibizi_Elyse) [![pH-7](https://img.shields.io/badge/GitHub-100000?style=for-the-badge&logo=github&logoColor=white)](https://github.com/elyse502)
+This project is licensed under the MIT License.
 
 ---
 
 <div align="center">
-Made with ❤️ by <b>Elysée NIYIBIZI</b>
+Made with ❤️ by <b>SkillSphere - Vardhan</b>
 </div>
-
-
-
-
