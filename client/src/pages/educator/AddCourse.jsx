@@ -19,6 +19,10 @@ const AddCourse = () => {
   const [chapters, setChapters] = useState([]);
   const [showPopup, setShowPopup] = useState(false);
   const [currentChapterId, setCurrentChapterId] = useState(null);
+  const [lectureVideoFile, setLectureVideoFile] = useState(null);
+  const [uploadingVideo, setUploadingVideo] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [tempCourseId, setTempCourseId] = useState(null); // Temporary course ID for upload
 
   const [lectureDetails, setLectureDetails] = useState({
     lectureTitle: "",
@@ -72,23 +76,151 @@ const AddCourse = () => {
     }
   };
 
-  const addLecture = () => {
+  // Helper function to check if URL is YouTube
+  const isYouTubeUrl = (url) => {
+    if (!url) return false;
+    return (
+      url.includes("youtube.com") ||
+      url.includes("youtu.be") ||
+      url.includes("youtube")
+    );
+  };
+
+  // Upload video to S3
+  const uploadVideoToS3 = async (file, lectureId, chapterId) => {
+    try {
+      setUploadingVideo(true);
+      setUploadProgress(0);
+
+      // Get presigned URL from backend
+      const token = await getToken();
+      const { data: uploadData } = await axios.post(
+        `${backendUrl}/api/video/upload-url`,
+        {
+          fileName: file.name,
+          contentType: file.type,
+          courseId: tempCourseId || "temp", // Use temp ID if course not created yet
+          chapterId: chapterId,
+          lectureId: lectureId,
+        },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      if (!uploadData.success) {
+        throw new Error(uploadData.message || "Failed to get upload URL");
+      }
+
+      const { uploadUrl, fileKey } = uploadData;
+
+      // Upload file directly to S3 using XMLHttpRequest for progress tracking
+      return new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+
+        xhr.upload.addEventListener("progress", (e) => {
+          if (e.lengthComputable) {
+            const percentComplete = (e.loaded / e.total) * 100;
+            setUploadProgress(percentComplete);
+          }
+        });
+
+        xhr.addEventListener("load", () => {
+          if (xhr.status === 200) {
+            setUploadProgress(100);
+            resolve(fileKey); // Return fileKey to store in lectureUrl
+          } else {
+            reject(new Error("Upload failed"));
+          }
+        });
+
+        xhr.addEventListener("error", () => {
+          reject(new Error("Upload failed"));
+        });
+
+        xhr.open("PUT", uploadUrl);
+        xhr.setRequestHeader("Content-Type", file.type);
+        xhr.send(file);
+      });
+    } catch (error) {
+      console.error("Upload error:", error);
+      throw error;
+    } finally {
+      setUploadingVideo(false);
+      setUploadProgress(0);
+    }
+  };
+
+  const addLecture = async () => {
+    if (!lectureDetails.lectureTitle || !lectureDetails.lectureDuration) {
+      toast.error("Please fill in lecture title and duration");
+      return;
+    }
+
+    const lectureId = uniqid();
+    let finalLectureUrl = lectureDetails.lectureUrl;
+
+    // If video file is selected, upload to S3
+    if (lectureVideoFile) {
+      try {
+        // Validate file size (max 2GB)
+        const maxSize = 2 * 1024 * 1024 * 1024; // 2GB in bytes
+        if (lectureVideoFile.size > maxSize) {
+          toast.error("Video file size must be less than 2GB");
+          return;
+        }
+
+        // Validate file type
+        const allowedTypes = [
+          "video/mp4",
+          "video/webm",
+          "video/quicktime",
+          "video/x-msvideo",
+          "video/x-matroska",
+        ];
+        if (!allowedTypes.includes(lectureVideoFile.type)) {
+          toast.error(
+            "Invalid video type. Allowed: MP4, WebM, MOV, AVI, MKV"
+          );
+          return;
+        }
+
+        toast.info("Uploading video...");
+        const fileKey = await uploadVideoToS3(
+          lectureVideoFile,
+          lectureId,
+          currentChapterId
+        );
+        finalLectureUrl = fileKey; // Store S3 fileKey instead of URL
+        toast.success("Video uploaded successfully!");
+      } catch (error) {
+        toast.error(error.message || "Failed to upload video");
+        return;
+      }
+    } else if (!lectureDetails.lectureUrl || (!isYouTubeUrl(lectureDetails.lectureUrl) && !lectureDetails.lectureUrl.startsWith("courses/"))) {
+      // If no file and no valid URL, warn user
+      if (!window.confirm("No video file or YouTube URL provided. Continue anyway?")) {
+        return;
+      }
+    }
+
+    // Add lecture to chapter
     setChapters(
       chapters.map((chapter) => {
         if (chapter.chapterId === currentChapterId) {
           const newLecture = {
             ...lectureDetails,
+            lectureUrl: finalLectureUrl,
             lectureOrder:
               chapter.chapterContent.length > 0
                 ? chapter.chapterContent.slice(-1)[0].lectureOrder + 1
                 : 1,
-            lectureId: uniqid(),
+            lectureId: lectureId,
           };
           chapter.chapterContent.push(newLecture);
         }
         return chapter;
       })
     );
+
     setShowPopup(false);
     setLectureDetails({
       lectureTitle: "",
@@ -96,6 +228,7 @@ const AddCourse = () => {
       lectureUrl: "",
       isPreviewFree: false,
     });
+    setLectureVideoFile(null);
   };
 
   const handleSubmit = async (e) => {
@@ -340,17 +473,66 @@ const AddCourse = () => {
                 </div>
 
                 <div className="mb-2">
-                  <p>Lecture URL</p>
+                  <p>Video Upload (or YouTube URL)</p>
+                  <input
+                    type="file"
+                    accept="video/*"
+                    className="mt-1 block w-full border rounded py-1 px-2 text-sm"
+                    onChange={(e) => {
+                      const file = e.target.files[0];
+                      if (file) {
+                        // Validate file size (max 2GB)
+                        const maxSize = 2 * 1024 * 1024 * 1024;
+                        if (file.size > maxSize) {
+                          toast.error("Video file size must be less than 2GB");
+                          e.target.value = "";
+                          return;
+                        }
+                        setLectureVideoFile(file);
+                        // Clear YouTube URL if file is selected
+                        setLectureDetails({
+                          ...lectureDetails,
+                          lectureUrl: "",
+                        });
+                      }
+                    }}
+                  />
+                  {lectureVideoFile && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      Selected: {lectureVideoFile.name} (
+                      {(lectureVideoFile.size / (1024 * 1024)).toFixed(2)} MB)
+                    </p>
+                  )}
+                  {uploadingVideo && (
+                    <div className="mt-2">
+                      <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div
+                          className="bg-blue-600 h-2 rounded-full transition-all"
+                          style={{ width: `${uploadProgress}%` }}
+                        ></div>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Uploading... {uploadProgress.toFixed(0)}%
+                      </p>
+                    </div>
+                  )}
+                  <p className="text-xs text-gray-400 mt-1 mb-2">OR</p>
                   <input
                     type="text"
-                    className="mt-1 block w-full border rounded py-1 px-2"
+                    placeholder="YouTube URL (optional if uploading video)"
+                    className="mt-1 block w-full border rounded py-1 px-2 text-sm"
                     value={lectureDetails.lectureUrl}
-                    onChange={(e) =>
+                    onChange={(e) => {
                       setLectureDetails({
                         ...lectureDetails,
                         lectureUrl: e.target.value,
-                      })
-                    }
+                      });
+                      // Clear video file if YouTube URL is entered
+                      if (e.target.value) {
+                        setLectureVideoFile(null);
+                      }
+                    }}
+                    disabled={!!lectureVideoFile}
                   />
                 </div>
 
@@ -371,10 +553,11 @@ const AddCourse = () => {
 
                 <button
                   type="button"
-                  className="w-full bg-blue-400 text-white px-4 py-2 rounded"
+                  className="w-full bg-blue-400 text-white px-4 py-2 rounded disabled:opacity-50 disabled:cursor-not-allowed"
                   onClick={addLecture}
+                  disabled={uploadingVideo}
                 >
-                  Add
+                  {uploadingVideo ? "Uploading..." : "Add"}
                 </button>
 
                 <img

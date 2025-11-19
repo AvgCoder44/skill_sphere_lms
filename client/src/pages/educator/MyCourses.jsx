@@ -10,6 +10,7 @@ const MyCourses = () => {
   const navigate = useNavigate();
 
   const [courses, setCourses] = useState(null);
+  const [deletingCourseId, setDeletingCourseId] = useState(null);
 
   const fetchEducatorCourses = async () => {
     try {
@@ -21,6 +22,36 @@ const MyCourses = () => {
       data.success && setCourses(data.courses);
     } catch (error) {
       toast.error(error.message);
+    }
+  };
+
+  const handleDeleteCourse = async (courseId) => {
+    if (
+      !window.confirm(
+        "Are you sure you want to delete this course? This action cannot be undone."
+      )
+    ) {
+      return;
+    }
+
+    try {
+      setDeletingCourseId(courseId);
+      const token = await getToken();
+      const { data } = await axios.delete(
+        `${backendUrl}/api/educator/course/${courseId}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      if (data.success) {
+        toast.success(data.message);
+        fetchEducatorCourses(); // Refresh list
+      } else {
+        toast.error(data.message);
+      }
+    } catch (error) {
+      toast.error(error.message || "Failed to delete course");
+    } finally {
+      setDeletingCourseId(null);
     }
   };
 
@@ -82,6 +113,13 @@ const MyCourses = () => {
                       className="px-4 py-2 border border-blue-500 text-blue-600 hover:bg-blue-500/10 transition"
                     >
                       Edit
+                    </button>
+                    <button
+                      onClick={() => handleDeleteCourse(course._id)}
+                      disabled={deletingCourseId === course._id}
+                      className="px-4 py-2 border border-red-500 text-red-600 hover:bg-red-500/10 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {deletingCourseId === course._id ? "Deleting..." : "Delete"}
                     </button>
                   </td>
                 </tr>

@@ -26,6 +26,9 @@ const Player = () => {
   const [progressData, setProgressData] = useState(null);
   const [initialRating, setInitialRating] = useState(0);
   const [youtubePlayer, setYoutubePlayer] = useState(null);
+  const [videoStreamUrl, setVideoStreamUrl] = useState(null);
+  const [isLoadingVideo, setIsLoadingVideo] = useState(false);
+  const [videoPlayerRef, setVideoPlayerRef] = useState(null);
   const progressUpdateInterval = useRef(null);
 
   const getCourseData = () => {
@@ -43,6 +46,22 @@ const Player = () => {
 
   const toggleSection = (index) => {
     setOpenSections((prev) => ({ ...prev, [index]: !prev[index] }));
+  };
+
+  // Helper function to check if URL is YouTube
+  const isYouTubeUrl = (url) => {
+    if (!url) return false;
+    return (
+      url.includes("youtube.com") ||
+      url.includes("youtu.be") ||
+      url.includes("youtube")
+    );
+  };
+
+  // Helper function to check if URL is S3 fileKey
+  const isS3Video = (url) => {
+    if (!url) return false;
+    return url.startsWith("courses/") && !url.includes("http");
   };
 
   const extractYouTubeId = (url = "") => {
@@ -67,6 +86,31 @@ const Player = () => {
       return lastSegment.split("?")[0];
     } catch {
       return url.split("?")[0];
+    }
+  };
+
+  // Get S3 video stream URL
+  const getS3VideoUrl = async (fileKey, courseId, lectureId) => {
+    try {
+      setIsLoadingVideo(true);
+      const token = await getToken();
+      const { data } = await axios.post(
+        `${backendUrl}/api/video/stream-url`,
+        { fileKey, courseId, lectureId },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      if (data.success) {
+        return data.streamUrl;
+      } else {
+        throw new Error(data.message || "Failed to get video URL");
+      }
+    } catch (error) {
+      console.error("Error getting S3 video URL:", error);
+      toast.error(error.message || "Failed to load video");
+      throw error;
+    } finally {
+      setIsLoadingVideo(false);
     }
   };
 
@@ -149,8 +193,8 @@ const Player = () => {
         {
           courseId,
           lectureId: playerData.lectureId,
-          watchTime: currentTime,
-          totalDuration: totalDuration,
+          watchTime: Math.floor(currentTime), // Convert to seconds
+          totalDuration: Math.floor(totalDuration), // Convert to seconds
         },
         { headers: { Authorization: `Bearer ${token}` } }
       );
@@ -159,6 +203,46 @@ const Player = () => {
       getCourseProgress();
     } catch (error) {
       console.error("Failed to update watch progress:", error);
+    }
+  };
+
+  // Handle HTML5 video events
+  const handleVideoLoadedMetadata = (e) => {
+    const video = e.target;
+    if (video && progressData && playerData) {
+      const lectureProgress = progressData.lectureProgress?.find(
+        (lp) => lp.lectureId === playerData.lectureId
+      );
+      
+      if (lectureProgress && lectureProgress.watchTime > 0 && lectureProgress.watchTime < lectureProgress.totalDuration) {
+        // Resume from last watched position
+        video.currentTime = lectureProgress.watchTime;
+      }
+    }
+  };
+
+  const handleVideoTimeUpdate = (e) => {
+    const video = e.target;
+    if (video && video.readyState >= 2) {
+      // Update progress every 5 seconds
+      const currentTime = Math.floor(video.currentTime);
+      const totalDuration = Math.floor(video.duration);
+      
+      // Only update if significant time has passed (avoid too many requests)
+      if (currentTime % 5 === 0 && currentTime > 0) {
+        updateWatchProgress(currentTime, totalDuration);
+      }
+    }
+  };
+
+  const handleVideoEnded = (e) => {
+    const video = e.target;
+    if (video && playerData) {
+      const currentTime = Math.floor(video.currentTime);
+      const totalDuration = Math.floor(video.duration);
+      updateWatchProgress(currentTime, totalDuration);
+      // Auto-mark as completed
+      markLectureAsCompleted(playerData.lectureId);
     }
   };
 
@@ -276,17 +360,53 @@ const Player = () => {
                             lecture.lectureId
                           );
 
-                        const playLecture = () => {
+                        const playLecture = async () => {
                           if (!lecture.lectureUrl) {
                             toast.warn("Lecture link not available yet.");
                             return;
                           }
-                          setPlayerData({
-                            ...lecture,
-                            videoId: extractYouTubeId(lecture.lectureUrl),
-                            chapter: index + 1,
-                            lecture: i + 1,
-                          });
+
+                          // Check if it's S3 video or YouTube
+                          if (isS3Video(lecture.lectureUrl)) {
+                            try {
+                              setIsLoadingVideo(true);
+                              const streamUrl = await getS3VideoUrl(
+                                lecture.lectureUrl,
+                                courseId,
+                                lecture.lectureId
+                              );
+                              setVideoStreamUrl(streamUrl);
+                              setPlayerData({
+                                ...lecture,
+                                videoType: "s3",
+                                chapter: index + 1,
+                                lecture: i + 1,
+                              });
+                            } catch (error) {
+                              toast.error("Failed to load video");
+                            } finally {
+                              setIsLoadingVideo(false);
+                            }
+                          } else if (isYouTubeUrl(lecture.lectureUrl)) {
+                            // YouTube video
+                            setVideoStreamUrl(null);
+                            setPlayerData({
+                              ...lecture,
+                              videoId: extractYouTubeId(lecture.lectureUrl),
+                              videoType: "youtube",
+                              chapter: index + 1,
+                              lecture: i + 1,
+                            });
+                          } else {
+                            // Fallback for other URLs
+                            setVideoStreamUrl(lecture.lectureUrl);
+                            setPlayerData({
+                              ...lecture,
+                              videoType: "url",
+                              chapter: index + 1,
+                              lecture: i + 1,
+                            });
+                          }
                         };
 
                         return (
@@ -333,12 +453,42 @@ const Player = () => {
         <div className="md:mt-10">
           {playerData ? (
             <div>
-              <YouTube
-                videoId={playerData.videoId}
-                iframeClassName="w-full aspect-video"
-                onReady={handlePlayerReady}
-                onStateChange={handlePlayerStateChange}
-              />
+              {isLoadingVideo ? (
+                <div className="w-full aspect-video bg-gray-900 flex items-center justify-center">
+                  <p className="text-white">Loading video...</p>
+                </div>
+              ) : playerData.videoType === "s3" && videoStreamUrl ? (
+                <video
+                  ref={setVideoPlayerRef}
+                  src={videoStreamUrl}
+                  controls
+                  className="w-full aspect-video"
+                  onLoadedMetadata={handleVideoLoadedMetadata}
+                  onTimeUpdate={handleVideoTimeUpdate}
+                  onEnded={handleVideoEnded}
+                />
+              ) : playerData.videoType === "youtube" && playerData.videoId ? (
+                <YouTube
+                  videoId={playerData.videoId}
+                  iframeClassName="w-full aspect-video"
+                  onReady={handlePlayerReady}
+                  onStateChange={handlePlayerStateChange}
+                />
+              ) : videoStreamUrl ? (
+                <video
+                  ref={setVideoPlayerRef}
+                  src={videoStreamUrl}
+                  controls
+                  className="w-full aspect-video"
+                  onLoadedMetadata={handleVideoLoadedMetadata}
+                  onTimeUpdate={handleVideoTimeUpdate}
+                  onEnded={handleVideoEnded}
+                />
+              ) : (
+                <div className="w-full aspect-video bg-gray-900 flex items-center justify-center">
+                  <p className="text-white">Video not available</p>
+                </div>
+              )}
               <div className="flex justify-between items-center mt-1">
                 <p>
                   {playerData.chapter}.{playerData.lecture}{" "}
