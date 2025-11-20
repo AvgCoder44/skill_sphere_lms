@@ -110,7 +110,7 @@ const MyEnrollments = () => {
           <thead className="text-gray-900 border-b border-gray-500/20 text-sm text-left max-sm:hidden">
             <tr>
               <th className="px-4 py-3 font-semibold truncate">Course</th>
-              <th className="px-4 py-3 font-semibold truncate">Duration</th>
+              <th className="px-4 py-3 font-semibold truncate">Durationssss</th>
               <th className="px-4 py-3 font-semibold truncate">Completed</th>
               <th className="px-4 py-3 font-semibold truncate">Status</th>
             </tr>
