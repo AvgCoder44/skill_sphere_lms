@@ -328,7 +328,7 @@ const CourseDetails = () => {
               />
 
               <p className="text-red-500">
-                <span className="font-medium">5 days</span> left at this price!
+                <span className="font-medium">10 days</span> left at this price!
               </p>
             </div>
 
