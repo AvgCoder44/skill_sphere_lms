@@ -16,6 +16,8 @@ const CourseDetails = () => {
   const [openSections, setOpenSections] = useState({});
   const [isAlreadyEnrolled, setIsAlreadyEnrolled] = useState(false);
   const [playerData, setPlayerData] = useState(null);
+  const [videoStreamUrl, setVideoStreamUrl] = useState(null);
+  const [isLoadingVideo, setIsLoadingVideo] = useState(false);
 
   const {
     allCourses,
@@ -132,6 +134,22 @@ const CourseDetails = () => {
     }
   }, [userData, courseData]);
 
+  // Helper function to check if URL is YouTube
+  const isYouTubeUrl = (url) => {
+    if (!url) return false;
+    return (
+      url.includes("youtube.com") ||
+      url.includes("youtu.be") ||
+      url.includes("youtube")
+    );
+  };
+
+  // Helper function to check if URL is an S3 file key
+  const isS3Video = (url) => {
+    if (!url) return false;
+    return url.startsWith("courses/") && !url.includes("http");
+  };
+
   const extractYouTubeId = (url = "") => {
     try {
       if (!url) return "";
@@ -154,6 +172,33 @@ const CourseDetails = () => {
       return lastSegment.split("?")[0];
     } catch {
       return url.split("?")[0];
+    }
+  };
+
+  // Get S3 video stream URL for preview (no enrollment required if lecture.isPreviewFree)
+  const getS3VideoUrl = async (fileKey, courseId, lectureId) => {
+    try {
+      setIsLoadingVideo(true);
+      const token = userData ? await getToken() : null;
+
+      const { data } = await axios.post(
+        `${backendUrl}/api/video/stream-url`,
+        { fileKey, courseId, lectureId },
+        token
+          ? { headers: { Authorization: `Bearer ${token}` } }
+          : undefined
+      );
+
+      if (data.success) {
+        return data.streamUrl;
+      } else {
+        throw new Error(data.message || "Failed to load preview video");
+      }
+    } catch (error) {
+      toast.error(error.message || "Failed to load preview video");
+      throw error;
+    } finally {
+      setIsLoadingVideo(false);
     }
   };
 
@@ -260,13 +305,50 @@ const CourseDetails = () => {
                             <div className="flex gap-2">
                               {lecture.isPreviewFree && (
                                 <p
-                                  onClick={() =>
-                                    setPlayerData({
-                                      videoId: extractYouTubeId(
-                                        lecture.lectureUrl
-                                      ),
-                                    })
-                                  }
+                                  onClick={async () => {
+                                    if (!lecture.lectureUrl) {
+                                      toast.warn(
+                                        "Preview video is not available yet."
+                                      );
+                                      return;
+                                    }
+
+                                    try {
+                                      if (isS3Video(lecture.lectureUrl)) {
+                                        // S3 hosted preview
+                                        const streamUrl = await getS3VideoUrl(
+                                          lecture.lectureUrl,
+                                          courseData._id,
+                                          lecture.lectureId
+                                        );
+                                        setVideoStreamUrl(streamUrl);
+                                        setPlayerData({
+                                          videoType: "s3",
+                                          lectureTitle: lecture.lectureTitle,
+                                        });
+                                      } else if (
+                                        isYouTubeUrl(lecture.lectureUrl)
+                                      ) {
+                                        // YouTube preview
+                                        setVideoStreamUrl(null);
+                                        setPlayerData({
+                                          videoType: "youtube",
+                                          videoId: extractYouTubeId(
+                                            lecture.lectureUrl
+                                          ),
+                                        });
+                                      } else {
+                                        // Fallback: try treating as direct URL
+                                        setVideoStreamUrl(lecture.lectureUrl);
+                                        setPlayerData({
+                                          videoType: "url",
+                                          lectureTitle: lecture.lectureTitle,
+                                        });
+                                      }
+                                    } catch {
+                                      // Error already handled in getS3VideoUrl / toast
+                                    }
+                                  }}
                                   className="text-blue-500 cursor-pointer"
                                 >
                                   Preview
@@ -303,15 +385,42 @@ const CourseDetails = () => {
         {/* right column */}
         <div className="max-w-course-card z-10 shadow-custom-card rounded-t md:rounded-none overflow-hidden bg-white min-w-[300px] sm:min-w-[420px]">
           {playerData ? (
-            <YouTube
-              videoId={playerData.videoId}
-              opts={{
-                playerVars: {
-                  autoplay: 1,
-                },
-              }}
-              iframeClassName="w-full aspect-video"
-            />
+            <>
+              {isLoadingVideo ? (
+                <div className="w-full aspect-video bg-gray-900 flex items-center justify-center">
+                  <p className="text-white">Loading preview...</p>
+                </div>
+              ) : playerData.videoType === "s3" && videoStreamUrl ? (
+                <video
+                  src={videoStreamUrl}
+                  controls
+                  className="w-full aspect-video"
+                  autoPlay
+                />
+              ) : playerData.videoType === "youtube" &&
+                playerData.videoId ? (
+                <YouTube
+                  videoId={playerData.videoId}
+                  opts={{
+                    playerVars: {
+                      autoplay: 1,
+                    },
+                  }}
+                  iframeClassName="w-full aspect-video"
+                />
+              ) : playerData.videoType === "url" && videoStreamUrl ? (
+                <video
+                  src={videoStreamUrl}
+                  controls
+                  className="w-full aspect-video"
+                  autoPlay
+                />
+              ) : (
+                <div className="w-full aspect-video bg-gray-900 flex items-center justify-center">
+                  <p className="text-white">Preview not available</p>
+                </div>
+              )}
+            </>
           ) : (
             <img
               src={courseData.courseThumbnail}
