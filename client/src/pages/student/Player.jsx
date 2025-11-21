@@ -28,7 +28,7 @@ const Player = () => {
   const [youtubePlayer, setYoutubePlayer] = useState(null);
   const [videoStreamUrl, setVideoStreamUrl] = useState(null);
   const [isLoadingVideo, setIsLoadingVideo] = useState(false);
-  const [videoPlayerRef, setVideoPlayerRef] = useState(null);
+  const videoPlayerRef = useRef(null);
   const progressUpdateInterval = useRef(null);
 
   const getCourseData = () => {
@@ -229,7 +229,8 @@ const Player = () => {
       const totalDuration = Math.floor(video.duration);
       
       // Only update if significant time has passed (avoid too many requests)
-      if (currentTime % 5 === 0 && currentTime > 0) {
+      // Use a ref to track last update time
+      if (currentTime > 0 && currentTime % 5 === 0) {
         updateWatchProgress(currentTime, totalDuration);
       }
     }
@@ -459,7 +460,7 @@ const Player = () => {
                 </div>
               ) : playerData.videoType === "s3" && videoStreamUrl ? (
                 <video
-                  ref={setVideoPlayerRef}
+                  ref={videoPlayerRef}
                   src={videoStreamUrl}
                   controls
                   className="w-full aspect-video"
@@ -476,7 +477,7 @@ const Player = () => {
                 />
               ) : videoStreamUrl ? (
                 <video
-                  ref={setVideoPlayerRef}
+                  ref={videoPlayerRef}
                   src={videoStreamUrl}
                   controls
                   className="w-full aspect-video"
